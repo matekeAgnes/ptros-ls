@@ -73,13 +73,13 @@ export default function OrderHistory() {
   return (
     <div>
       <Toaster position="top-right" />
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">My Orders</h1>
-        <p className="text-gray-600 mt-2">View and track all your deliveries</p>
+      <div className="mb-5 sm:mb-8">
+        <h1 className="text-2xl font-bold text-gray-800 sm:text-3xl">My Orders</h1>
+        <p className="mt-2 text-sm text-gray-600 sm:text-base">View and track all your deliveries</p>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl shadow p-6 mb-6">
+      <div className="mb-6 rounded-xl bg-white p-4 shadow sm:p-6">
         <div className="flex flex-wrap gap-3">
           <button
             onClick={() => setFilter("all")}
@@ -139,14 +139,14 @@ export default function OrderHistory() {
           {filteredOrders.map((order) => (
             <div
               key={order.id}
-              className="bg-white rounded-xl shadow p-6 hover:shadow-lg transition"
+              className="rounded-xl bg-white p-4 shadow transition hover:shadow-lg sm:p-6"
             >
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex-1">
-                  <div className="flex items-center space-x-4 mb-2">
-                    <h3 className="text-lg font-bold">{order.trackingCode}</h3>
+                  <div className="mb-2 flex flex-wrap items-center gap-2 sm:gap-4">
+                    <h3 className="text-base font-bold sm:text-lg">{order.trackingCode}</h3>
                     <span
-                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      className={`rounded-full px-3 py-1 text-xs font-medium sm:text-sm ${
                         order.status === "delivered"
                           ? "bg-green-100 text-green-800"
                           : order.status === "in_transit"
@@ -159,13 +159,13 @@ export default function OrderHistory() {
                       {order.status}
                     </span>
                   </div>
-                  <p className="text-gray-600">To: {order.deliveryAddress}</p>
-                  <p className="text-sm text-gray-500 mt-2">
+                  <p className="text-sm text-gray-600 sm:text-base">To: {order.deliveryAddress}</p>
+                  <p className="mt-2 text-xs text-gray-500 sm:text-sm">
                     Ordered on {order.createdAt.toLocaleDateString()}
                   </p>
                 </div>
-                <div className="text-right">
-                  <div className="flex items-center gap-2">
+                <div className="text-left sm:text-right">
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     <Link
                       to={`/track/${order.id}`}
                       className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-cyan-100 text-cyan-700 hover:bg-cyan-200"

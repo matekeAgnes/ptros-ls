@@ -143,32 +143,32 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex h-screen w-64 shrink-0 flex-col bg-blue-900 text-white transition-transform duration-300 lg:sticky lg:top-0 lg:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-40 flex h-screen w-64 shrink-0 flex-col bg-emerald-900 text-white transition-transform duration-300 lg:sticky lg:top-0 lg:translate-x-0 ${
         mobileOpen ? "translate-x-0" : "-translate-x-full"
       } ${collapsed ? "lg:w-20" : "lg:w-64"}`}
     >
       {/* Logo */}
-      <div className="p-6 border-b border-blue-800">
+      <div className="p-6 border-b border-emerald-800">
         <div className="flex items-center justify-between">
           {!collapsed && (
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                <span className="text-blue-900 font-bold text-xl">P</span>
+                <span className="text-emerald-900 font-bold text-xl">P</span>
               </div>
               <div>
                 <h2 className="text-xl font-bold">PTROS</h2>
-                <p className="text-xs text-blue-300">Customer</p>
+                <p className="text-xs text-emerald-200">Customer</p>
               </div>
             </div>
           )}
           {collapsed && (
             <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center mx-auto">
-              <span className="text-blue-900 font-bold text-xl">P</span>
+              <span className="text-emerald-900 font-bold text-xl">P</span>
             </div>
           )}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden text-blue-300 hover:text-white lg:block"
+            className="hidden text-emerald-200 hover:text-white lg:block"
           >
             {collapsed ? "→" : "←"}
           </button>
@@ -186,8 +186,8 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
                 className={({ isActive }) =>
                   `flex items-center px-4 py-3 rounded-lg transition-colors whitespace-nowrap ${
                     isActive
-                      ? "bg-blue-800 text-white"
-                      : "text-blue-200 hover:bg-blue-800 hover:text-white"
+                      ? "bg-emerald-800 text-white"
+                      : "text-emerald-100 hover:bg-emerald-800 hover:text-white"
                   }`
                 }
               >
@@ -201,9 +201,9 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
 
       {/* Quick Stats (only when expanded) */}
       {!collapsed && (
-        <div className="p-4 border-t border-blue-800">
-          <div className="bg-blue-800 rounded-lg p-4">
-            <p className="text-xs text-blue-300 mb-2">Active Orders</p>
+        <div className="p-4 border-t border-emerald-800">
+          <div className="bg-emerald-800 rounded-lg p-4">
+            <p className="text-xs text-emerald-200 mb-2">Active Orders</p>
             <p className="text-2xl font-bold">3</p>
           </div>
         </div>

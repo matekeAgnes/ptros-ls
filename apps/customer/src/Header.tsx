@@ -177,7 +177,7 @@ export default function Header({ user, userProfile, onToggleSidebar }: Props) {
         </div>
 
         {/* Right: User profile and logout */}
-        <div className="flex items-center justify-end space-x-3 sm:space-x-4">
+        <div className="flex items-center justify-end space-x-2 sm:space-x-4">
           <div className="text-right hidden md:block">
             <p className="font-medium text-gray-800">
               {userProfile?.fullName || user.email}
@@ -193,7 +193,7 @@ export default function Header({ user, userProfile, onToggleSidebar }: Props) {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            Logout
+            <span className="hidden sm:inline">Logout</span>
           </button>
 
           <div className="relative">
