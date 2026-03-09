@@ -1,5 +1,7 @@
 // apps/coordinator/src/CustomerList.tsx
 import { useEffect, useState } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faUsers } from "@fortawesome/free-solid-svg-icons";
 import { db } from "@config";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 
@@ -65,7 +67,9 @@ export default function CustomerList() {
 
       {customers.length === 0 ? (
         <div className="bg-white rounded-xl shadow p-8 text-center">
-          <div className="text-6xl mb-4">👥</div>
+          <div className="text-6xl mb-4 text-blue-600">
+            <FontAwesomeIcon icon={faUsers} />
+          </div>
           <h3 className="text-xl font-semibold text-gray-700 mb-2">
             No customers found
           </h3>

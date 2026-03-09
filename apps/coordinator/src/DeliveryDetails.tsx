@@ -6,6 +6,8 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { toast, Toaster } from "react-hot-toast";
 import { format } from "date-fns";
 import { writeTimestamp, getTimeServiceStatus } from "./services/timeService";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faUser, faEnvelope, faPhone } from "@fortawesome/free-solid-svg-icons";
 
 interface CustomerProfile {
   id: string;
@@ -362,7 +364,10 @@ export default function DeliveryDetails() {
         {/* Customer Profile */}
         <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-6 border-l-4 border-blue-600">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">👤 Customer Profile</h2>
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <FontAwesomeIcon icon={faUser} className="text-blue-600" />
+              Customer Profile
+            </h2>
             {customerProfile && (
               <button
                 onClick={() => navigate(`/customers/${customerProfile.id}`)}
@@ -421,7 +426,9 @@ export default function DeliveryDetails() {
                   }
                   className="flex-1 px-3 py-2 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 text-sm font-medium"
                 >
-                  ✉️ Email
+                  <span className="inline-flex items-center gap-2">
+                    <FontAwesomeIcon icon={faEnvelope} /> Email
+                  </span>
                 </button>
                 <button
                   onClick={() =>
@@ -429,7 +436,9 @@ export default function DeliveryDetails() {
                   }
                   className="flex-1 px-3 py-2 bg-green-50 text-green-600 rounded hover:bg-green-100 text-sm font-medium"
                 >
-                  📞 Call
+                  <span className="inline-flex items-center gap-2">
+                    <FontAwesomeIcon icon={faPhone} /> Call
+                  </span>
                 </button>
               </div>
             </div>

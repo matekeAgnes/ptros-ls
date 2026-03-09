@@ -1,6 +1,8 @@
 // apps/coordinator/src/Sidebar.tsx
 import { NavLink } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, ReactNode } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faUsers } from "@fortawesome/free-solid-svg-icons";
 import { db } from "@config";
 import { collection, query, where, getDocs, Timestamp } from "firebase/firestore";
 
@@ -8,6 +10,12 @@ interface QuickStats {
   active: number;
   today: number;
   revenue: number;
+}
+
+interface NavItem {
+  path: string;
+  icon: ReactNode;
+  label: string;
 }
 
 export default function Sidebar() {
@@ -60,13 +68,17 @@ export default function Sidebar() {
     }
   };
 
-  const navItems = [
+  const navItems: NavItem[] = [
     { path: "/dashboard", icon: "📊", label: "Dashboard" },
     { path: "/deliveries/create", icon: "➕", label: "Create Delivery" },
     { path: "/deliveries/active", icon: "📦", label: "Active Deliveries" },
     { path: "/carriers/pending", icon: "⏳", label: "Pending Carriers" },
     { path: "/carriers/active", icon: "🏍️", label: "Active Carriers" },
-    { path: "/customers", icon: "👥", label: "Customers" },
+    {
+      path: "/customers",
+      icon: <FontAwesomeIcon icon={faUsers} />,
+      label: "Customers",
+    },
     { path: "/tracking/live", icon: "📍", label: "Live Tracking" },
     { path: "/analytics", icon: "📈", label: "Analytics" },
     { path: "/settings", icon: "⚙️", label: "Settings" },

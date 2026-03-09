@@ -1,5 +1,7 @@
 // apps/coordinator/src/Dashboard.tsx - UPDATED
 import { useState, useEffect } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faUser } from "@fortawesome/free-solid-svg-icons";
 import { db } from "@config";
 import { collection, query, where, getDocs, Timestamp } from "firebase/firestore";
 
@@ -258,7 +260,7 @@ export default function Dashboard({ user, userProfile }: Props) {
                       ? "📦"
                       : activity.type === "carrier"
                       ? "🏍️"
-                      : "👤"}
+                      : <FontAwesomeIcon icon={faUser} />}
                   </span>
                 </div>
                 <div className="flex-1">
