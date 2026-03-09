@@ -18,7 +18,12 @@ interface NavItem {
   label: string;
 }
 
-export default function Sidebar() {
+type SidebarProps = {
+  mobileOpen?: boolean;
+  onClose?: () => void;
+};
+
+export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [stats, setStats] = useState<QuickStats>({
     active: 0,
@@ -84,11 +89,17 @@ export default function Sidebar() {
     { path: "/settings", icon: "⚙️", label: "Settings" },
   ];
 
+  const handleNavClick = () => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      onClose?.();
+    }
+  };
+
   return (
     <aside
-      className={`bg-primary text-white ${
-        collapsed ? "w-20" : "w-64"
-      } transition-all duration-300 flex flex-col h-screen shadow-xl flex-shrink-0`}
+      className={`fixed inset-y-0 left-0 z-40 flex h-screen w-64 flex-col bg-primary text-white shadow-xl transition-transform duration-300 lg:sticky lg:top-0 lg:translate-x-0 lg:shadow-xl ${
+        mobileOpen ? "translate-x-0" : "-translate-x-full"
+      } ${collapsed ? "lg:w-20" : "lg:w-64"}`}
     >
       {/* Logo */}
       <div className="p-6 border-b border-primary-dark">
@@ -111,7 +122,7 @@ export default function Sidebar() {
           )}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="text-blue-200 hover:text-white transition-colors"
+            className="hidden text-blue-200 transition-colors hover:text-white lg:block"
           >
             {collapsed ? "→" : "←"}
           </button>
@@ -125,6 +136,7 @@ export default function Sidebar() {
             <li key={item.path}>
               <NavLink
                 to={item.path}
+                onClick={handleNavClick}
                 className={({ isActive }) =>
                   `flex items-center px-4 py-3 rounded-lg transition-all duration-200 ${
                     isActive

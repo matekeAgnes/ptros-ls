@@ -2,7 +2,12 @@
 import { NavLink } from "react-router-dom";
 import { useState } from "react";
 
-export default function Sidebar() {
+type SidebarProps = {
+  mobileOpen?: boolean;
+  onClose?: () => void;
+};
+
+export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   const navItems = [
@@ -130,11 +135,17 @@ export default function Sidebar() {
     }
   };
 
+  const handleNavClick = () => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      onClose?.();
+    }
+  };
+
   return (
     <aside
-      className={`bg-blue-900 text-white ${
-        collapsed ? "w-20" : "w-64"
-      } transition-all duration-300 flex flex-col h-screen sticky top-0 shrink-0`}
+      className={`fixed inset-y-0 left-0 z-40 flex h-screen w-64 shrink-0 flex-col bg-blue-900 text-white transition-transform duration-300 lg:sticky lg:top-0 lg:translate-x-0 ${
+        mobileOpen ? "translate-x-0" : "-translate-x-full"
+      } ${collapsed ? "lg:w-20" : "lg:w-64"}`}
     >
       {/* Logo */}
       <div className="p-6 border-b border-blue-800">
@@ -157,7 +168,7 @@ export default function Sidebar() {
           )}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="text-blue-300 hover:text-white"
+            className="hidden text-blue-300 hover:text-white lg:block"
           >
             {collapsed ? "→" : "←"}
           </button>
@@ -171,6 +182,7 @@ export default function Sidebar() {
             <li key={item.path}>
               <NavLink
                 to={item.path}
+                onClick={handleNavClick}
                 className={({ isActive }) =>
                   `flex items-center px-4 py-3 rounded-lg transition-colors whitespace-nowrap ${
                     isActive
