@@ -3,8 +3,6 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { db } from "@config";
 import { collection, query, where, getDocs } from "firebase/firestore";
-import { createSampleNotifications } from "./services/notificationService";
-import toast from "react-hot-toast";
 
 type Props = {
   user: any;
@@ -38,6 +36,7 @@ export default function Dashboard({ user, userProfile }: Props) {
             status: data.status,
             pickupAddress: data.pickupAddress,
             deliveryAddress: data.deliveryAddress,
+            paymentAmount: Number(data.paymentAmount || 0),
             createdAt: data.createdAt?.toDate() || new Date(),
             estimatedDelivery: data.estimatedDelivery?.toDate(),
           });
@@ -46,13 +45,18 @@ export default function Dashboard({ user, userProfile }: Props) {
         setDeliveries(deliveryList.slice(0, 5)); // Show recent 5
 
         // Calculate stats
+        const totalSpent = deliveryList.reduce(
+          (sum, delivery) => sum + (Number(delivery.paymentAmount) || 0),
+          0,
+        );
+
         setStats({
           totalOrders: deliveryList.length,
           activeOrders: deliveryList.filter((d) => d.status !== "delivered")
             .length,
           completedOrders: deliveryList.filter((d) => d.status === "delivered")
             .length,
-          totalSpent: 0, // TODO: Calculate from actual data
+          totalSpent,
         });
       } catch (error) {
         console.error("Error fetching deliveries:", error);
@@ -89,16 +93,6 @@ export default function Dashboard({ user, userProfile }: Props) {
     },
   ];
 
-  const handleCreateSampleNotifications = async () => {
-    try {
-      await createSampleNotifications(user.uid);
-      toast.success("Sample notifications created! Check the bell icon.");
-    } catch (error) {
-      toast.error("Failed to create sample notifications");
-      console.error(error);
-    }
-  };
-
   return (
     <div>
       <div className="mb-5 sm:mb-8">
@@ -112,7 +106,10 @@ export default function Dashboard({ user, userProfile }: Props) {
 
       {/* Stats Cards */}
       <div className="mb-6 grid grid-cols-1 gap-3 sm:mb-8 sm:gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-xl bg-white p-4 shadow sm:p-6">
+        <Link
+          to="/orders?filter=all"
+          className="rounded-xl bg-white p-4 shadow transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 sm:p-6"
+        >
           <div className="flex items-center">
             <div className="p-3 bg-blue-100 rounded-lg mr-4">
               <span className="text-2xl">📦</span>
@@ -120,11 +117,15 @@ export default function Dashboard({ user, userProfile }: Props) {
             <div>
               <p className="text-xs text-gray-500 sm:text-sm">Total Orders</p>
               <p className="text-2xl font-bold sm:text-3xl">{stats.totalOrders}</p>
+              <p className="mt-1 text-xs font-medium text-blue-600">Tap to view all orders →</p>
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="rounded-xl bg-white p-4 shadow sm:p-6">
+        <Link
+          to="/orders?filter=active"
+          className="rounded-xl bg-white p-4 shadow transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 sm:p-6"
+        >
           <div className="flex items-center">
             <div className="p-3 bg-yellow-100 rounded-lg mr-4">
               <span className="text-2xl">⏳</span>
@@ -132,11 +133,15 @@ export default function Dashboard({ user, userProfile }: Props) {
             <div>
               <p className="text-xs text-gray-500 sm:text-sm">Active Orders</p>
               <p className="text-2xl font-bold sm:text-3xl">{stats.activeOrders}</p>
+              <p className="mt-1 text-xs font-medium text-yellow-700">Tap to view in-transit & assigned →</p>
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="rounded-xl bg-white p-4 shadow sm:p-6">
+        <Link
+          to="/orders?filter=completed"
+          className="rounded-xl bg-white p-4 shadow transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-green-500 sm:p-6"
+        >
           <div className="flex items-center">
             <div className="p-3 bg-green-100 rounded-lg mr-4">
               <span className="text-2xl">✅</span>
@@ -144,21 +149,26 @@ export default function Dashboard({ user, userProfile }: Props) {
             <div>
               <p className="text-xs text-gray-500 sm:text-sm">Completed</p>
               <p className="text-2xl font-bold sm:text-3xl">{stats.completedOrders}</p>
+              <p className="mt-1 text-xs font-medium text-green-700">Tap to view delivered orders →</p>
             </div>
           </div>
-        </div>
+        </Link>
 
-        <div className="rounded-xl bg-white p-4 shadow sm:p-6">
+        <Link
+          to="/orders?filter=completed&focus=spent"
+          className="rounded-xl bg-white p-4 shadow transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-purple-500 sm:p-6"
+        >
           <div className="flex items-center">
             <div className="p-3 bg-purple-100 rounded-lg mr-4">
               <span className="text-2xl">💰</span>
             </div>
             <div>
               <p className="text-xs text-gray-500 sm:text-sm">Total Spent</p>
-              <p className="text-2xl font-bold sm:text-3xl">M{stats.totalSpent}</p>
+              <p className="text-2xl font-bold sm:text-3xl">M{stats.totalSpent.toFixed(2)}</p>
+              <p className="mt-1 text-xs font-medium text-purple-700">Tap to view spending details →</p>
             </div>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Quick Actions */}
@@ -177,22 +187,6 @@ export default function Dashboard({ user, userProfile }: Props) {
           ))}
         </div>
       </div>
-
-      {/* Development: Test Notifications */}
-      {true && (
-        <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 sm:mb-8">
-          <p className="mb-3 text-sm text-blue-700">
-            <strong>Test Mode:</strong> Create sample notifications to test the
-            notification system
-          </p>
-          <button
-            onClick={handleCreateSampleNotifications}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition"
-          >
-            Create Sample Notifications
-          </button>
-        </div>
-      )}
 
       {/* Recent Orders */}
       <div className="rounded-xl bg-white p-4 shadow sm:p-6">

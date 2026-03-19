@@ -3,7 +3,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { db, realtimeDb } from "@config";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { ref as rtdbRef, onValue } from "firebase/database";
-import { Toaster } from "react-hot-toast";
+import { Toaster, toast } from "react-hot-toast";
+import { useSearchParams } from "react-router-dom";
 import MapLegend from "./components/MapLegend";
 
 declare global {
@@ -66,8 +67,10 @@ interface MarkerData {
 }
 
 type Props = { user: any };
+type DeliveryFilter = "all" | "active" | "in_transit" | "delivered";
 
 export default function TrackingMap({ user }: Props) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [deliveryTracksMap, setDeliveryTracksMap] = useState<
     Record<string, any>
@@ -75,6 +78,8 @@ export default function TrackingMap({ user }: Props) {
   const [googleMapsLoaded, setGoogleMapsLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [selectedDelivery, setSelectedDelivery] = useState<string | null>(null);
+  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
+  const [trackingCodeFilter, setTrackingCodeFilter] = useState("");
   const [loading, setLoading] = useState(true);
 
   const mapRef = useRef<HTMLDivElement>(null);
@@ -86,9 +91,73 @@ export default function TrackingMap({ user }: Props) {
   const pickupToDropoffPolylineRef = useRef<any>(null);
   const activePolylineRef = useRef<any>(null);
   const plannedPolylineRef = useRef<any>(null);
+  const consumedRouteTargetRef = useRef(false);
 
   // Default center (Maseru, Lesotho)
   const defaultCenter = { lat: -29.31, lng: 27.48 };
+  const activeStatuses = [
+    "assigned",
+    "picked_up",
+    "in_transit",
+    "out_for_delivery",
+  ];
+
+  const activeDeliveries = deliveries.filter((d) =>
+    activeStatuses.includes(d.status),
+  );
+  const inTransitDeliveries = deliveries.filter((d) =>
+    ["in_transit", "out_for_delivery"].includes(d.status),
+  );
+  const deliveredDeliveries = deliveries.filter((d) => d.status === "delivered");
+  const pinnedDeliveryId = (searchParams.get("deliveryId") || "").trim();
+
+  const statusFilteredDeliveries =
+    deliveryFilter === "all"
+      ? deliveries
+      : deliveryFilter === "active"
+        ? activeDeliveries
+        : deliveryFilter === "in_transit"
+          ? inTransitDeliveries
+          : deliveredDeliveries;
+
+  const normalizedTrackingCodeFilter = trackingCodeFilter.trim().toUpperCase();
+
+  const visibleDeliveries = statusFilteredDeliveries.filter((delivery) => {
+    if (pinnedDeliveryId) {
+      return delivery.id === pinnedDeliveryId;
+    }
+
+    if (!normalizedTrackingCodeFilter) return true;
+    return String(delivery.trackingCode || "")
+      .toUpperCase()
+      .includes(normalizedTrackingCodeFilter);
+  });
+
+  // Apply tracking code passed from Track Order page
+  useEffect(() => {
+    const codeFromQuery = (searchParams.get("trackingCode") || "")
+      .trim()
+      .toUpperCase();
+    setTrackingCodeFilter(codeFromQuery);
+  }, [searchParams]);
+
+  // Consume deliveryId/trackingCode once, then clear from URL so it doesn't stick
+  // when navigating away and coming back to Live Tracking later.
+  useEffect(() => {
+    if (consumedRouteTargetRef.current || loading) return;
+
+    const hasPinnedDelivery = Boolean((searchParams.get("deliveryId") || "").trim());
+    const hasTrackingCode = Boolean((searchParams.get("trackingCode") || "").trim());
+
+    if (!hasPinnedDelivery && !hasTrackingCode) return;
+
+    consumedRouteTargetRef.current = true;
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("deliveryId");
+    nextParams.delete("trackingCode");
+    setSearchParams(nextParams, { replace: true });
+  }, [loading, searchParams, setSearchParams]);
 
   // Listen for Google Maps ready signal
   useEffect(() => {
@@ -193,14 +262,6 @@ export default function TrackingMap({ user }: Props) {
 
         snapshot.forEach((doc) => {
           const data = doc.data();
-          const rtdbLoc = deliveryTracksMap[doc.id];
-          const loc = rtdbLoc
-            ? {
-                lat: rtdbLoc.lat,
-                lng: rtdbLoc.lng,
-                timestamp: new Date(rtdbLoc.timestamp),
-              }
-            : data.currentLocation;
 
           deliveryList.push({
             id: doc.id,
@@ -210,7 +271,7 @@ export default function TrackingMap({ user }: Props) {
             deliveryAddress: data.deliveryAddress,
             estimatedDeliveryTime: data.estimatedDeliveryTime,
             distance: data.distance,
-            currentLocation: loc,
+            currentLocation: data.currentLocation,
             pickupLocation: data.pickupLocation,
             deliveryLocation: data.deliveryLocation,
             carrierName: data.carrierName,
@@ -226,11 +287,6 @@ export default function TrackingMap({ user }: Props) {
 
         setDeliveries(deliveryList);
         setLoading(false);
-
-        // Auto-select first delivery if none selected
-        if (deliveryList.length > 0 && !selectedDelivery) {
-          setSelectedDelivery(deliveryList[0].id);
-        }
       },
       (error) => {
         console.error("Error loading deliveries:", error);
@@ -251,11 +307,53 @@ export default function TrackingMap({ user }: Props) {
         dTracksUnsub && dTracksUnsub();
       } catch (e) {}
     };
-  }, [user?.uid, deliveryTracksMap]);
+  }, [user?.uid]);
 
-  // Initialize Google Map
+  // Keep selected delivery in sync with current filter
+  useEffect(() => {
+    if (pinnedDeliveryId) {
+      const pinnedMatch = visibleDeliveries.find((d) => d.id === pinnedDeliveryId);
+
+      if (pinnedMatch) {
+        if (selectedDelivery !== pinnedMatch.id) {
+          setSelectedDelivery(pinnedMatch.id);
+        }
+      } else if (selectedDelivery !== null) {
+        setSelectedDelivery(null);
+      }
+
+      return;
+    }
+
+    if (visibleDeliveries.length === 0) {
+      if (selectedDelivery !== null) {
+        setSelectedDelivery(null);
+      }
+      return;
+    }
+
+    const existsInVisible = visibleDeliveries.some(
+      (delivery) => delivery.id === selectedDelivery,
+    );
+
+    if (!selectedDelivery || !existsInVisible) {
+      setSelectedDelivery(visibleDeliveries[0].id);
+    }
+  }, [visibleDeliveries, selectedDelivery, pinnedDeliveryId]);
+
+  // Notify when a tracking code filter yields no match
+  useEffect(() => {
+    if (!normalizedTrackingCodeFilter || loading) return;
+    if (deliveries.length === 0) return;
+    if (visibleDeliveries.length > 0) return;
+
+    toast.error(`No order found for ${normalizedTrackingCodeFilter}`);
+  }, [normalizedTrackingCodeFilter, deliveries.length, visibleDeliveries.length, loading]);
+
+  // Initialize Google Map (only after the map container is mounted)
   useEffect(() => {
     if (!googleMapsLoaded || !window.google || !mapRef.current) return;
+    if (mapInstance.current) return;
 
     console.log("🔄 Initializing Tracking Map...");
 
@@ -291,7 +389,7 @@ export default function TrackingMap({ user }: Props) {
         "Failed to initialize map. Please check console for details.",
       );
     }
-  }, [googleMapsLoaded]);
+  }, [googleMapsLoaded, loading, deliveries.length]);
 
   // Update markers and route line
   const updateMarkers = useCallback(() => {
@@ -303,8 +401,22 @@ export default function TrackingMap({ user }: Props) {
     )
       return;
 
-    const delivery = deliveries.find((d) => d.id === selectedDelivery);
+    const delivery = visibleDeliveries.find((d) => d.id === selectedDelivery);
     if (!delivery) return;
+
+    const liveTrack = deliveryTracksMap[delivery.id];
+    const effectiveCurrentLocation =
+      liveTrack && typeof liveTrack.lat === "number" && typeof liveTrack.lng === "number"
+        ? {
+            lat: liveTrack.lat,
+            lng: liveTrack.lng,
+            timestamp:
+              typeof liveTrack.timestamp === "number"
+                ? new Date(liveTrack.timestamp)
+                : delivery.currentLocation?.timestamp,
+            address: delivery.currentLocation?.address,
+          }
+        : delivery.currentLocation;
 
     // Build marker data for selected delivery
     const newMarkerData: MarkerData[] = [];
@@ -331,12 +443,12 @@ export default function TrackingMap({ user }: Props) {
     }
 
     // Add current location marker
-    if (delivery.currentLocation) {
+    if (effectiveCurrentLocation) {
       newMarkerData.push({
         id: `current-${delivery.id}`,
         type: "current",
-        lat: delivery.currentLocation.lat,
-        lng: delivery.currentLocation.lng,
+        lat: effectiveCurrentLocation.lat,
+        lng: effectiveCurrentLocation.lng,
         title: `Order: ${delivery.trackingCode}`,
         content: `
           <div style="padding: 10px; min-width: 220px; font-family: system-ui;">
@@ -345,7 +457,7 @@ export default function TrackingMap({ user }: Props) {
               Status: <strong>${delivery.status.replace(/_/g, " ")}</strong>
             </p>
             <p style="margin: 0 0 5px 0; font-size: 11px;">
-              📍 ${delivery.currentLocation.address || "Current location"}
+              📍 ${effectiveCurrentLocation.address || "Current location"}
             </p>
             ${
               delivery.carrierName
@@ -475,7 +587,7 @@ export default function TrackingMap({ user }: Props) {
 
     if (
       delivery.pickupLocation &&
-      delivery.currentLocation &&
+      effectiveCurrentLocation &&
       delivery.deliveryLocation
     ) {
       const pickupPoint = {
@@ -483,8 +595,8 @@ export default function TrackingMap({ user }: Props) {
         lng: delivery.pickupLocation.lng,
       };
       const currentPoint = {
-        lat: delivery.currentLocation.lat,
-        lng: delivery.currentLocation.lng,
+        lat: effectiveCurrentLocation.lat,
+        lng: effectiveCurrentLocation.lng,
       };
       const dropoffPoint = {
         lat: delivery.deliveryLocation.lat,
@@ -567,7 +679,7 @@ export default function TrackingMap({ user }: Props) {
         mapInstance.current.fitBounds(bounds, 50);
       }
     }
-  }, [deliveries, selectedDelivery, googleMapsLoaded]);
+  }, [visibleDeliveries, deliveryTracksMap, selectedDelivery, googleMapsLoaded]);
 
   // Debounced marker updates
   useEffect(() => {
@@ -584,7 +696,7 @@ export default function TrackingMap({ user }: Props) {
         clearTimeout(markersUpdateTimeoutRef.current);
       }
     };
-  }, [deliveries, selectedDelivery, googleMapsLoaded, updateMarkers]);
+  }, [visibleDeliveries, deliveryTracksMap, selectedDelivery, googleMapsLoaded, updateMarkers]);
 
   const centerOnDelivery = (deliveryId: string) => {
     const delivery = deliveries.find((d) => d.id === deliveryId);
@@ -680,37 +792,121 @@ export default function TrackingMap({ user }: Props) {
         </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-xl shadow">
-          <div className="text-sm text-gray-500">Active Orders</div>
-          <div className="text-2xl font-bold text-blue-600">
-            {deliveries.length}
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow">
-          <div className="text-sm text-gray-500">In Transit</div>
-          <div className="text-2xl font-bold text-amber-600">
-            {deliveries.filter((d) => d.status === "in_transit").length}
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow">
-          <div className="text-sm text-gray-500">Delivered</div>
-          <div className="text-2xl font-bold text-green-600">
-            {deliveries.filter((d) => d.status === "delivered").length}
-          </div>
+      <div className="mb-6 rounded-xl bg-white p-4 shadow sm:p-5">
+        <label
+          htmlFor="tracking-code-filter"
+          className="mb-2 block text-sm font-medium text-gray-700"
+        >
+          Tracking code filter
+        </label>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <input
+            id="tracking-code-filter"
+            type="text"
+            value={trackingCodeFilter}
+            onChange={(e) => {
+              const value = e.target.value.toUpperCase();
+              setTrackingCodeFilter(value);
+
+              const nextParams = new URLSearchParams(searchParams);
+              nextParams.delete("deliveryId");
+              if (value.trim()) {
+                nextParams.set("trackingCode", value.trim());
+              } else {
+                nextParams.delete("trackingCode");
+              }
+              setSearchParams(nextParams, { replace: true });
+            }}
+            placeholder="e.g., PTR-001234"
+            className="w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setTrackingCodeFilter("");
+              const nextParams = new URLSearchParams(searchParams);
+              nextParams.delete("deliveryId");
+              nextParams.delete("trackingCode");
+              setSearchParams(nextParams, { replace: true });
+            }}
+            className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+          >
+            Clear code
+          </button>
         </div>
       </div>
 
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <button
+          type="button"
+          onClick={() => setDeliveryFilter("active")}
+          className={`p-4 rounded-xl shadow text-left border-2 transition ${
+            deliveryFilter === "active"
+              ? "bg-blue-50 border-blue-300"
+              : "bg-white border-transparent hover:border-blue-200"
+          }`}
+        >
+          <div className="text-sm text-gray-500">Active Orders</div>
+          <div className="text-2xl font-bold text-blue-600">
+            {activeDeliveries.length}
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setDeliveryFilter("in_transit")}
+          className={`p-4 rounded-xl shadow text-left border-2 transition ${
+            deliveryFilter === "in_transit"
+              ? "bg-amber-50 border-amber-300"
+              : "bg-white border-transparent hover:border-amber-200"
+          }`}
+        >
+          <div className="text-sm text-gray-500">In Transit</div>
+          <div className="text-2xl font-bold text-amber-600">
+            {inTransitDeliveries.length}
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setDeliveryFilter("delivered")}
+          className={`p-4 rounded-xl shadow text-left border-2 transition ${
+            deliveryFilter === "delivered"
+              ? "bg-green-50 border-green-300"
+              : "bg-white border-transparent hover:border-green-200"
+          }`}
+        >
+          <div className="text-sm text-gray-500">Delivered</div>
+          <div className="text-2xl font-bold text-green-600">
+            {deliveredDeliveries.length}
+          </div>
+        </button>
+      </div>
+
+      <div className="mb-6 flex items-center justify-between">
+        <p className="text-sm text-gray-500">
+          Showing <span className="font-semibold">{visibleDeliveries.length}</span>{" "}
+          order{visibleDeliveries.length === 1 ? "" : "s"}
+        </p>
+        <button
+          type="button"
+          onClick={() => setDeliveryFilter("all")}
+          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+        >
+          Show all
+        </button>
+      </div>
+
       {/* No Orders Message */}
-      {deliveries.length === 0 ? (
+      {visibleDeliveries.length === 0 ? (
         <div className="bg-white rounded-xl shadow p-8 text-center">
           <div className="text-6xl mb-4">📦</div>
           <h3 className="text-xl font-semibold text-gray-700 mb-2">
-            No active orders
+            {deliveries.length === 0 ? "No active orders" : "No orders in this filter"}
           </h3>
           <p className="text-gray-500">
-            Your orders will appear here once they are assigned to a carrier
+            {deliveries.length === 0
+              ? "Your orders will appear here once they are assigned to a carrier"
+              : "Try another card above or click Show all"}
           </p>
         </div>
       ) : (
@@ -791,7 +987,7 @@ export default function TrackingMap({ user }: Props) {
             <div className="lg:col-span-1">
               <h3 className="text-xl font-bold mb-4">Your Orders</h3>
               <div className="space-y-3">
-                {deliveries.map((delivery) => (
+                {visibleDeliveries.map((delivery) => (
                   <div
                     key={delivery.id}
                     onClick={() => {
@@ -830,9 +1026,9 @@ export default function TrackingMap({ user }: Props) {
             {/* Order Details */}
             <div className="lg:col-span-2">
               {selectedDelivery &&
-              deliveries.find((d) => d.id === selectedDelivery)
+              visibleDeliveries.find((d) => d.id === selectedDelivery)
                 ? (() => {
-                    const delivery = deliveries.find(
+                    const delivery = visibleDeliveries.find(
                       (d) => d.id === selectedDelivery,
                     )!;
                     const displayOtp =

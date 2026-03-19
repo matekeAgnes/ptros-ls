@@ -1,6 +1,36 @@
 // apps/customer/src/CreateOrder.tsx
 import AddressAutocomplete from "./AddressAutocomplete";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+
+declare global {
+  interface Window { google: any; }
+}
+
+function AddressMapPreview({ lat, lng, label }: { lat: number; lng: number; label: string }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mapRef.current || !window.google?.maps) return;
+    const center = { lat, lng };
+    const map = new window.google.maps.Map(mapRef.current, {
+      center,
+      zoom: 15,
+      disableDefaultUI: true,
+      zoomControl: true,
+    });
+    new window.google.maps.Marker({ position: center, map, title: label });
+  }, [lat, lng, label]);
+
+  return (
+    <div className="mt-3 border border-green-200 rounded-lg overflow-hidden shadow-sm">
+      <div className="bg-green-50 px-3 py-1.5 text-xs text-green-700 font-medium flex items-center gap-1.5">
+        <span>📍</span>
+        <span className="truncate">Confirm location: {label}</span>
+      </div>
+      <div ref={mapRef} style={{ height: "200px" }} />
+    </div>
+  );
+}
 import { db } from "@config";
 import {
   collection,
@@ -25,6 +55,38 @@ interface Coordinates {
 export default function CreateOrder({ user }: Props) {
   const navigate = useNavigate();
   const { geocodeAddress } = useGeocoder();
+
+  // Called when user selects a suggestion from the pickup autocomplete dropdown
+  const handlePickupPlaceSelect = (place: any) => {
+    if (!place?.geometry?.location) return;
+    const loc = place.geometry.location;
+    const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
+    const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+    setFormData((prev) => ({
+      ...prev,
+      pickupCoordinates: {
+        lat,
+        lng,
+        address: place.formatted_address || prev.pickupAddress,
+      },
+    }));
+  };
+
+  // Called when user selects a suggestion from the delivery autocomplete dropdown
+  const handleDeliveryPlaceSelect = (place: any) => {
+    if (!place?.geometry?.location) return;
+    const loc = place.geometry.location;
+    const lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
+    const lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+    setFormData((prev) => ({
+      ...prev,
+      deliveryCoordinates: {
+        lat,
+        lng,
+        address: place.formatted_address || prev.deliveryAddress,
+      },
+    }));
+  };
 
   // Form state with all detailed fields
   const [formData, setFormData] = useState({
@@ -645,16 +707,15 @@ export default function CreateOrder({ user }: Props) {
               <AddressAutocomplete
                 value={formData.pickupAddress}
                 onChange={handlePickupAddressChange}
+                onSelect={handlePickupPlaceSelect}
                 placeholder="Start typing address..."
               />
               {formData.pickupCoordinates && (
-                <div className="mt-2 flex items-center text-sm text-green-600">
-                  <span className="mr-2">✓</span>
-                  <span>
-                    Coordinates ready: {formData.pickupCoordinates.lat.toFixed(6)},{" "}
-                    {formData.pickupCoordinates.lng.toFixed(6)}
-                  </span>
-                </div>
+                <AddressMapPreview
+                  lat={formData.pickupCoordinates.lat}
+                  lng={formData.pickupCoordinates.lng}
+                  label={formData.pickupAddress}
+                />
               )}
             </div>
 
@@ -747,16 +808,15 @@ export default function CreateOrder({ user }: Props) {
               <AddressAutocomplete
                 value={formData.deliveryAddress}
                 onChange={handleDeliveryAddressChange}
+                onSelect={handleDeliveryPlaceSelect}
                 placeholder="Start typing address..."
               />
               {formData.deliveryCoordinates && (
-                <div className="mt-2 flex items-center text-sm text-green-600">
-                  <span className="mr-2">✓</span>
-                  <span>
-                    Coordinates ready: {formData.deliveryCoordinates.lat.toFixed(6)},{" "}
-                    {formData.deliveryCoordinates.lng.toFixed(6)}
-                  </span>
-                </div>
+                <AddressMapPreview
+                  lat={formData.deliveryCoordinates.lat}
+                  lng={formData.deliveryCoordinates.lng}
+                  label={formData.deliveryAddress}
+                />
               )}
             </div>
 

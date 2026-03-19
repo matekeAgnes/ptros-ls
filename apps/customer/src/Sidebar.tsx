@@ -1,6 +1,8 @@
 // apps/customer/src/Sidebar.tsx
 import { NavLink } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { auth, db } from "@config";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 
 type SidebarProps = {
   mobileOpen?: boolean;
@@ -9,6 +11,47 @@ type SidebarProps = {
 
 export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [activeOrdersCount, setActiveOrdersCount] = useState(0);
+
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) {
+      setActiveOrdersCount(0);
+      return;
+    }
+
+    const q = query(
+      collection(db, "deliveries"),
+      where("customerId", "==", user.uid),
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const activeStatuses = new Set([
+          "assigned",
+          "picked_up",
+          "in_transit",
+          "out_for_delivery",
+        ]);
+
+        let count = 0;
+        snapshot.forEach((doc) => {
+          const status = String(doc.data().status || "");
+          if (activeStatuses.has(status)) {
+            count += 1;
+          }
+        });
+
+        setActiveOrdersCount(count);
+      },
+      (error) => {
+        console.error("Error loading active orders count:", error);
+      },
+    );
+
+    return () => unsubscribe();
+  }, []);
 
   const navItems = [
     { path: "/dashboard", icon: "home", label: "Home" },
@@ -202,10 +245,15 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
       {/* Quick Stats (only when expanded) */}
       {!collapsed && (
         <div className="p-4 border-t border-emerald-800">
-          <div className="bg-emerald-800 rounded-lg p-4">
+          <NavLink
+            to="/orders?filter=active"
+            onClick={handleNavClick}
+            className="block bg-emerald-800 rounded-lg p-4 transition-colors hover:bg-emerald-700"
+          >
             <p className="text-xs text-emerald-200 mb-2">Active Orders</p>
-            <p className="text-2xl font-bold">3</p>
-          </div>
+            <p className="text-2xl font-bold">{activeOrdersCount}</p>
+            <p className="mt-1 text-xs text-emerald-200">Tap to view active orders →</p>
+          </NavLink>
         </div>
       )}
     </aside>
