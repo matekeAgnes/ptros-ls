@@ -81,6 +81,7 @@ export default function TrackingMap({ user }: Props) {
   const [selectedDelivery, setSelectedDelivery] = useState<string | null>(null);
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
   const [trackingCodeFilter, setTrackingCodeFilter] = useState("");
+  const [showRouteKey, setShowRouteKey] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const mapRef = useRef<HTMLDivElement>(null);
@@ -651,12 +652,13 @@ export default function TrackingMap({ user }: Props) {
 
       const plannedPath = decodePolyline(delivery.route?.polyline);
       const activePath = decodePolyline(delivery.routeHistory?.activePolyline);
+      const routePalette = getRoutePalette(delivery.status);
 
       plannedPolylineRef.current = new window.google.maps.Polyline({
         path:
           plannedPath.length > 1 ? plannedPath : [pickupPoint, dropoffPoint],
         geodesic: true,
-        strokeColor: "#f59e0b",
+        strokeColor: routePalette.planned,
         strokeOpacity: 0.75,
         strokeWeight: 3,
         icons: [
@@ -676,7 +678,7 @@ export default function TrackingMap({ user }: Props) {
       pickupToDropoffPolylineRef.current = new window.google.maps.Polyline({
         path: [pickupPoint, dropoffPoint],
         geodesic: true,
-        strokeColor: "#fb923c",
+        strokeColor: routePalette.primary,
         strokeOpacity: 0.4,
         strokeWeight: 5,
         map: mapInstance.current,
@@ -696,7 +698,7 @@ export default function TrackingMap({ user }: Props) {
           path:
             activePath.length > 1 ? activePath : [pickupPoint, currentPoint],
           geodesic: true,
-          strokeColor: "#14b8a6",
+          strokeColor: routePalette.active,
           strokeOpacity: 0.95,
           strokeWeight: 5,
           icons: [
@@ -755,6 +757,50 @@ export default function TrackingMap({ user }: Props) {
     }
   };
 
+  const getRoutePalette = (status: string) => {
+    switch (status) {
+      case "picked_up":
+        return {
+          active: "#8b5cf6",
+          primary: "#a78bfa",
+          planned: "#c4b5fd",
+        };
+      case "in_transit":
+        return {
+          active: "#f59e0b",
+          primary: "#fb923c",
+          planned: "#fbbf24",
+        };
+      case "out_for_delivery":
+        return {
+          active: "#0ea5e9",
+          primary: "#38bdf8",
+          planned: "#7dd3fc",
+        };
+      case "delivered":
+        return {
+          active: "#16a34a",
+          primary: "#22c55e",
+          planned: "#86efac",
+        };
+      case "assigned":
+        return {
+          active: "#f59e0b",
+          primary: "#fb923c",
+          planned: "#fbbf24",
+        };
+      default:
+        return {
+          active: "#14b8a6",
+          primary: "#2dd4bf",
+          planned: "#5eead4",
+        };
+    }
+  };
+
+  const formatStatusLabel = (status: string) =>
+    status.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "assigned":
@@ -788,6 +834,16 @@ export default function TrackingMap({ user }: Props) {
         return "📍";
     }
   };
+
+  const selectedDeliveryData = selectedDelivery
+    ? visibleDeliveries.find((delivery) => delivery.id === selectedDelivery)
+    : null;
+  const selectedRoutePalette = getRoutePalette(
+    selectedDeliveryData?.status || "in_transit",
+  );
+  const selectedStatusLabel = selectedDeliveryData
+    ? formatStatusLabel(selectedDeliveryData.status)
+    : "Current";
 
   if (!googleMapsLoaded) {
     return (
@@ -988,35 +1044,48 @@ export default function TrackingMap({ user }: Props) {
                 style={{ minHeight: "500px" }}
               />
 
-              <MapLegend
-                title="Route key"
-                items={[
-                  {
-                    color: "#fbbf24",
-                    opacity: 0.4,
-                    label: "Carrier → Pickup",
-                    description: "Expected first leg before pickup",
-                  },
-                  {
-                    color: "#fb923c",
-                    opacity: 0.4,
-                    label: "Pickup → Dropoff",
-                    description: "Expected delivery path",
-                  },
-                  {
-                    color: "#14b8a6",
-                    opacity: 0.95,
-                    label: "Active route",
-                    description: "Current trip progress",
-                  },
-                  {
-                    color: "#f59e0b",
-                    opacity: 0.75,
-                    label: "Planned route",
-                    description: "Original optimized route",
-                  },
-                ]}
-              />
+              <div className="absolute top-4 left-4 z-20">
+                <button
+                  type="button"
+                  onClick={() => setShowRouteKey((prev) => !prev)}
+                  className="px-3 py-2 bg-white border border-gray-300 rounded-lg shadow hover:bg-gray-50 text-sm font-medium text-gray-700"
+                >
+                  {showRouteKey ? "Hide Route Key" : "Show Route Key"}
+                </button>
+              </div>
+
+              {showRouteKey && (
+                <MapLegend
+                  title="Route key"
+                  items={[
+                    {
+                      color: "#fbbf24",
+                      opacity: 0.4,
+                      label: "Carrier → Pickup",
+                      description: "Expected first leg before pickup",
+                    },
+                    {
+                      color: selectedRoutePalette.primary,
+                      opacity: 0.4,
+                      label: "Pickup → Dropoff",
+                      description: "Expected delivery path",
+                    },
+                    {
+                      color: selectedRoutePalette.active,
+                      opacity: 0.95,
+                      label: `${selectedStatusLabel} route`,
+                      description:
+                        "Color changes by package status (picked up, in transit, out for delivery, delivered)",
+                    },
+                    {
+                      color: selectedRoutePalette.planned,
+                      opacity: 0.75,
+                      label: "Planned route",
+                      description: "Original optimized route",
+                    },
+                  ]}
+                />
+              )}
             </div>
 
             <div className="border-t px-6 py-4 bg-gray-50">
