@@ -77,6 +77,7 @@ export default function TrackingMap({ user }: Props) {
   >({});
   const [googleMapsLoaded, setGoogleMapsLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [mapTilesLoaded, setMapTilesLoaded] = useState(false);
   const [selectedDelivery, setSelectedDelivery] = useState<string | null>(null);
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
   const [trackingCodeFilter, setTrackingCodeFilter] = useState("");
@@ -92,6 +93,7 @@ export default function TrackingMap({ user }: Props) {
   const activePolylineRef = useRef<any>(null);
   const plannedPolylineRef = useRef<any>(null);
   const consumedRouteTargetRef = useRef(false);
+  const mapTilesTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Default center (Maseru, Lesotho)
   const defaultCenter = { lat: -29.31, lng: 27.48 };
@@ -381,15 +383,59 @@ export default function TrackingMap({ user }: Props) {
       mapInstance.current = map;
       console.log("✅ Tracking Map initialized successfully");
 
+      const onTilesLoaded = window.google.maps.event.addListenerOnce(
+        map,
+        "tilesloaded",
+        () => {
+          setMapTilesLoaded(true);
+          if (mapTilesTimeoutRef.current) {
+            clearTimeout(mapTilesTimeoutRef.current);
+            mapTilesTimeoutRef.current = null;
+          }
+        },
+      );
+
+      // Force resize/recenter shortly after mount to avoid gray-map rendering
+      // when container layout settles after route transitions.
+      setTimeout(() => {
+        try {
+          if (!mapInstance.current || !window.google?.maps?.event) return;
+          window.google.maps.event.trigger(mapInstance.current, "resize");
+          mapInstance.current.setCenter(defaultCenter);
+        } catch (resizeError) {
+          console.warn("Map resize trigger failed:", resizeError);
+        }
+      }, 120);
+
+      mapTilesTimeoutRef.current = setTimeout(() => {
+        if (!mapTilesLoaded) {
+          setMapError(
+            "Map tiles did not load. Check internet connection and Google Maps API key referrer restrictions for this URL.",
+          );
+        }
+      }, 12000);
+
       markersRef.current = new Map();
       setMapError(null);
+
+      return () => {
+        try {
+          if (onTilesLoaded) {
+            window.google.maps.event.removeListener(onTilesLoaded);
+          }
+        } catch {}
+        if (mapTilesTimeoutRef.current) {
+          clearTimeout(mapTilesTimeoutRef.current);
+          mapTilesTimeoutRef.current = null;
+        }
+      };
     } catch (error) {
       console.error("❌ Error initializing map:", error);
       setMapError(
         "Failed to initialize map. Please check console for details.",
       );
     }
-  }, [googleMapsLoaded, loading, deliveries.length]);
+  }, [googleMapsLoaded, loading, deliveries.length, mapTilesLoaded]);
 
   // Update markers and route line
   const updateMarkers = useCallback(() => {

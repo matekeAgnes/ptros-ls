@@ -98,6 +98,13 @@ export default function TrackOrder() {
       const normalizedInput = trackingCode.trim().toUpperCase();
       const normalizedCurrentOrderCode = String(order?.trackingCode || "").toUpperCase();
 
+      // Backward-compatible behavior: if no specific order is selected/typed,
+      // open the live tracking dashboard directly.
+      if (!normalizedInput && !order) {
+        navigate("/track-map");
+        return;
+      }
+
       // If user typed a code, always resolve using that current input
       // (prevents stale previously-found order from being reused)
       const shouldSearchByInput =
