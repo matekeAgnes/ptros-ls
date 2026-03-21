@@ -18,6 +18,8 @@ import CustomerList from "./CustomerList";
 import CustomerDetails from "./CustomerDetails";
 import LiveMap from "./LiveMap";
 import Analytics from "./Analytics";
+import MapManagement from "./MapManagement";
+import RouteOptimizationCenter from "./RouteOptimizationCenter";
 import Settings from "./Settings";
 
 type Props = {
@@ -27,7 +29,6 @@ type Props = {
 export default function AppRouter({ user }: Props) {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -54,28 +55,11 @@ export default function AppRouter({ user }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 lg:flex">
-      <Sidebar
-        mobileOpen={mobileSidebarOpen}
-        onClose={() => setMobileSidebarOpen(false)}
-      />
-
-      {mobileSidebarOpen && (
-        <button
-          type="button"
-          aria-label="Close sidebar overlay"
-          onClick={() => setMobileSidebarOpen(false)}
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
-        />
-      )}
-
-      <div className="flex min-h-screen flex-1 flex-col">
-        <Header
-          user={user}
-          userProfile={userProfile}
-          onToggleSidebar={() => setMobileSidebarOpen((prev) => !prev)}
-        />
-        <main className="flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6">
+    <div className="flex min-h-screen bg-gray-50">
+      <Sidebar />
+      <div className="flex-1 min-w-0 flex flex-col">
+        <Header user={user} userProfile={userProfile} />
+        <main className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route
@@ -96,6 +80,11 @@ export default function AppRouter({ user }: Props) {
             <Route path="/customers" element={<CustomerList />} />
             <Route path="/customers/:id" element={<CustomerDetails />} />
             <Route path="/tracking/live" element={<LiveMap />} />
+            <Route
+              path="/routes/optimization"
+              element={<RouteOptimizationCenter />}
+            />
+            <Route path="/routes/management" element={<MapManagement />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -1,16 +1,31 @@
 // apps/coordinator/src/Header.tsx
 import { auth, db } from "@config";
 import { useState, useEffect } from "react";
-import { collection, query, where, getDocs, Timestamp } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  Timestamp,
+} from "firebase/firestore";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  FaBell,
+  FaCaretDown,
+  FaChartLine,
+  FaGear,
+  FaHourglassHalf,
+  FaMagnifyingGlass,
+  FaRightFromBracket,
+  FaWandMagicSparkles,
+} from "react-icons/fa6";
 
 type Props = {
   user: any;
   userProfile?: any;
-  onToggleSidebar?: () => void;
 };
 
-export default function Header({ user, userProfile, onToggleSidebar }: Props) {
+export default function Header({ user, userProfile }: Props) {
   const [showMenu, setShowMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
@@ -35,7 +50,7 @@ export default function Header({ user, userProfile, onToggleSidebar }: Props) {
       // Count pending deliveries
       const pendingDeliveriesQuery = query(
         collection(db, "deliveries"),
-        where("status", "==", "pending")
+        where("status", "==", "pending"),
       );
       const pendingDeliveriesSnapshot = await getDocs(pendingDeliveriesQuery);
       const pendingCount = pendingDeliveriesSnapshot.size;
@@ -45,7 +60,7 @@ export default function Header({ user, userProfile, onToggleSidebar }: Props) {
       today.setDate(today.getDate() - 1); // Last 24 hours
       const newDeliveriesQuery = query(
         collection(db, "deliveries"),
-        where("createdAt", ">=", Timestamp.fromDate(today))
+        where("createdAt", ">=", Timestamp.fromDate(today)),
       );
       const newDeliveriesSnapshot = await getDocs(newDeliveriesQuery);
       const newCount = newDeliveriesSnapshot.size;
@@ -59,41 +74,34 @@ export default function Header({ user, userProfile, onToggleSidebar }: Props) {
   };
 
   return (
-    <header className="border-b border-gray-200 bg-white px-3 py-3 shadow-sm sm:px-4 lg:px-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <header className="bg-white border-b border-gray-200 shadow-sm py-4 px-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         {/* Left: Search and notifications */}
-        <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-gray-700 transition-colors hover:bg-gray-100 lg:hidden"
-            aria-label="Toggle sidebar menu"
-          >
-            ☰
-          </button>
-
+        <div className="flex items-center space-x-2 sm:space-x-4">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               const trimmed = searchQuery.trim();
               if (!trimmed) return;
-              navigate(`/deliveries/active?search=${encodeURIComponent(trimmed)}`);
+              navigate(
+                `/deliveries/active?search=${encodeURIComponent(trimmed)}`,
+              );
             }}
-            className="flex flex-1 items-center gap-2"
+            className="flex items-center space-x-2"
           >
-            <div className="relative min-w-0 flex-1">
+            <div className="relative">
               <input
                 type="text"
                 placeholder="Search deliveries, carriers..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-4 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary sm:w-64"
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-44 sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
               />
-              <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
+              <FaMagnifyingGlass className="absolute left-3 top-2.5 text-gray-400" />
             </div>
             <button
               type="submit"
-              className="rounded-lg bg-primary px-3 py-2 font-medium text-white transition-colors hover:bg-primary-dark sm:px-4"
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors font-medium"
             >
               Search
             </button>
@@ -102,12 +110,12 @@ export default function Header({ user, userProfile, onToggleSidebar }: Props) {
           {/* Notification bell - Only show if there are notifications */}
           {notificationCount > 0 && (
             <div className="relative">
-              <button 
+              <button
                 onClick={() => setShowNotifications(!showNotifications)}
                 className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer animate-pulse"
                 title="View notifications"
               >
-                <span className="text-xl">🔔</span>
+                <FaBell className="text-xl" />
                 {notificationCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-5 h-5 bg-accent text-white text-xs rounded-full flex items-center justify-center font-semibold shadow-md">
                     {notificationCount}
@@ -131,8 +139,12 @@ export default function Header({ user, userProfile, onToggleSidebar }: Props) {
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-medium text-gray-800">⏳ Pending Deliveries</p>
-                          <p className="text-xs text-gray-500">Awaiting assignment</p>
+                          <p className="font-medium text-gray-800 inline-flex items-center gap-2">
+                            <FaHourglassHalf /> Pending Deliveries
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Awaiting assignment
+                          </p>
                         </div>
                       </div>
                     </button>
@@ -145,8 +157,12 @@ export default function Header({ user, userProfile, onToggleSidebar }: Props) {
                     >
                       <div className="flex items-start justify-between">
                         <div>
-                          <p className="font-medium text-gray-800">✨ New Deliveries</p>
-                          <p className="text-xs text-gray-500">Created in the last 24 hours</p>
+                          <p className="font-medium text-gray-800 inline-flex items-center gap-2">
+                            <FaWandMagicSparkles /> New Deliveries
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Created in the last 24 hours
+                          </p>
                         </div>
                       </div>
                     </button>
@@ -158,7 +174,7 @@ export default function Header({ user, userProfile, onToggleSidebar }: Props) {
         </div>
 
         {/* Right: User profile */}
-        <div className="flex items-center justify-end space-x-3 sm:space-x-4">
+        <div className="flex items-center space-x-4">
           <div className="text-right hidden md:block">
             <p className="font-semibold text-gray-800">
               {userProfile?.fullName || user.email}
@@ -176,7 +192,7 @@ export default function Header({ user, userProfile, onToggleSidebar }: Props) {
                   {userProfile?.fullName?.[0] || user.email?.[0] || "C"}
                 </span>
               </div>
-              <span className="text-gray-500">▼</span>
+              <FaCaretDown className="text-gray-500" />
             </button>
 
             {/* Dropdown menu */}
@@ -187,25 +203,37 @@ export default function Header({ user, userProfile, onToggleSidebar }: Props) {
                   <p className="text-sm text-gray-500">Coordinator</p>
                 </div>
                 <div className="py-2">
-                  <a
-                    href="/settings"
-                    className="block px-4 py-2 hover:bg-primary-bg hover:text-primary transition-colors"
+                  <button
+                    onClick={() => {
+                      navigate("/settings");
+                      setShowMenu(false);
+                    }}
+                    className="w-full text-left block px-4 py-2 hover:bg-primary-bg hover:text-primary transition-colors"
                   >
-                    ⚙️ Settings
-                  </a>
-                  <a href="#" className="block px-4 py-2 hover:bg-primary-bg hover:text-primary transition-colors">
-                    📊 Analytics
-                  </a>
-                  <a href="#" className="block px-4 py-2 hover:bg-primary-bg hover:text-primary transition-colors">
-                    🆘 Help
-                  </a>
+                    <span className="inline-flex items-center gap-2">
+                      <FaGear /> Settings
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      navigate("/analytics");
+                      setShowMenu(false);
+                    }}
+                    className="w-full text-left block px-4 py-2 hover:bg-primary-bg hover:text-primary transition-colors"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <FaChartLine /> Analytics
+                    </span>
+                  </button>
                 </div>
                 <div className="border-t border-gray-100 py-2">
                   <button
                     onClick={() => auth.signOut()}
                     className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 transition-colors font-medium"
                   >
-                    🚪 Logout
+                    <span className="inline-flex items-center gap-2">
+                      <FaRightFromBracket /> Logout
+                    </span>
                   </button>
                 </div>
               </div>

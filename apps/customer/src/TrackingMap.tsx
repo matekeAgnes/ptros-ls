@@ -1,6 +1,14 @@
 // apps/customer/src/TrackingMap.tsx
-import { useState, useEffect, useRef, useCallback } from "react";
-import { db, realtimeDb } from "@config";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+  db,
+  realtimeDb,
+  formatRouteNetworkSegmentType,
+  getDisplayRouteNetworkSegments,
+  getRouteNetworkSegmentStyle,
+  subscribeRouteNetworkSegments,
+  type RouteNetworkSegment,
+} from "@config";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { ref as rtdbRef, onValue } from "firebase/database";
 import { Toaster, toast } from "react-hot-toast";
@@ -54,6 +62,22 @@ interface Delivery {
     otp?: string;
     verified?: boolean;
   };
+  routeReviews?: Array<{
+    type: string;
+    reason?: string;
+    source?: string;
+    temporary?: boolean;
+    start?: { lat: number; lng: number };
+    end?: { lat: number; lng: number };
+  }>;
+  routeFeedback?: Array<{
+    type: string;
+    reason?: string;
+    note?: string;
+    source?: string;
+    start?: { lat: number; lng: number };
+    end?: { lat: number; lng: number };
+  }>;
 }
 
 interface MarkerData {
@@ -72,6 +96,9 @@ type DeliveryFilter = "all" | "active" | "in_transit" | "delivered";
 export default function TrackingMap({ user }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [managedSegments, setManagedSegments] = useState<RouteNetworkSegment[]>(
+    [],
+  );
   const [deliveryTracksMap, setDeliveryTracksMap] = useState<
     Record<string, any>
   >({});
@@ -93,6 +120,7 @@ export default function TrackingMap({ user }: Props) {
   const pickupToDropoffPolylineRef = useRef<any>(null);
   const activePolylineRef = useRef<any>(null);
   const plannedPolylineRef = useRef<any>(null);
+  const routeOverlayPolylinesRef = useRef<any[]>([]);
   const consumedRouteTargetRef = useRef(false);
   const mapTilesTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -111,7 +139,9 @@ export default function TrackingMap({ user }: Props) {
   const inTransitDeliveries = deliveries.filter((d) =>
     ["in_transit", "out_for_delivery"].includes(d.status),
   );
-  const deliveredDeliveries = deliveries.filter((d) => d.status === "delivered");
+  const deliveredDeliveries = deliveries.filter(
+    (d) => d.status === "delivered",
+  );
   const pinnedDeliveryId = (searchParams.get("deliveryId") || "").trim();
 
   const statusFilteredDeliveries =
@@ -149,8 +179,12 @@ export default function TrackingMap({ user }: Props) {
   useEffect(() => {
     if (consumedRouteTargetRef.current || loading) return;
 
-    const hasPinnedDelivery = Boolean((searchParams.get("deliveryId") || "").trim());
-    const hasTrackingCode = Boolean((searchParams.get("trackingCode") || "").trim());
+    const hasPinnedDelivery = Boolean(
+      (searchParams.get("deliveryId") || "").trim(),
+    );
+    const hasTrackingCode = Boolean(
+      (searchParams.get("trackingCode") || "").trim(),
+    );
 
     if (!hasPinnedDelivery && !hasTrackingCode) return;
 
@@ -196,6 +230,10 @@ export default function TrackingMap({ user }: Props) {
       window.removeEventListener("mapsReady", handleMapsReady);
       clearTimeout(timeout);
     };
+  }, []);
+
+  useEffect(() => {
+    return subscribeRouteNetworkSegments(setManagedSegments);
   }, []);
 
   const decodePolyline = (
@@ -285,6 +323,8 @@ export default function TrackingMap({ user }: Props) {
             otpCode: data.otpCode,
             otpVerified: data.otpVerified,
             proofOfDelivery: data.proofOfDelivery,
+            routeReviews: data.routeReviews || [],
+            routeFeedback: data.routeFeedback || [],
           });
         });
 
@@ -315,7 +355,9 @@ export default function TrackingMap({ user }: Props) {
   // Keep selected delivery in sync with current filter
   useEffect(() => {
     if (pinnedDeliveryId) {
-      const pinnedMatch = visibleDeliveries.find((d) => d.id === pinnedDeliveryId);
+      const pinnedMatch = visibleDeliveries.find(
+        (d) => d.id === pinnedDeliveryId,
+      );
 
       if (pinnedMatch) {
         if (selectedDelivery !== pinnedMatch.id) {
@@ -351,7 +393,12 @@ export default function TrackingMap({ user }: Props) {
     if (visibleDeliveries.length > 0) return;
 
     toast.error(`No order found for ${normalizedTrackingCodeFilter}`);
-  }, [normalizedTrackingCodeFilter, deliveries.length, visibleDeliveries.length, loading]);
+  }, [
+    normalizedTrackingCodeFilter,
+    deliveries.length,
+    visibleDeliveries.length,
+    loading,
+  ]);
 
   // Initialize Google Map (only after the map container is mounted)
   useEffect(() => {
@@ -453,7 +500,9 @@ export default function TrackingMap({ user }: Props) {
 
     const liveTrack = deliveryTracksMap[delivery.id];
     const effectiveCurrentLocation =
-      liveTrack && typeof liveTrack.lat === "number" && typeof liveTrack.lng === "number"
+      liveTrack &&
+      typeof liveTrack.lat === "number" &&
+      typeof liveTrack.lng === "number"
         ? {
             lat: liveTrack.lat,
             lng: liveTrack.lng,
@@ -631,20 +680,22 @@ export default function TrackingMap({ user }: Props) {
     if (plannedPolylineRef.current) {
       plannedPolylineRef.current.setMap(null);
     }
+    routeOverlayPolylinesRef.current.forEach((polyline) =>
+      polyline.setMap(null),
+    );
+    routeOverlayPolylinesRef.current = [];
 
-    if (
-      delivery.pickupLocation &&
-      effectiveCurrentLocation &&
-      delivery.deliveryLocation
-    ) {
+    if (delivery.pickupLocation && delivery.deliveryLocation) {
       const pickupPoint = {
         lat: delivery.pickupLocation.lat,
         lng: delivery.pickupLocation.lng,
       };
-      const currentPoint = {
-        lat: effectiveCurrentLocation.lat,
-        lng: effectiveCurrentLocation.lng,
-      };
+      const currentPoint = effectiveCurrentLocation
+        ? {
+            lat: effectiveCurrentLocation.lat,
+            lng: effectiveCurrentLocation.lng,
+          }
+        : null;
       const dropoffPoint = {
         lat: delivery.deliveryLocation.lat,
         lng: delivery.deliveryLocation.lng,
@@ -684,7 +735,7 @@ export default function TrackingMap({ user }: Props) {
         map: mapInstance.current,
       });
 
-      if (delivery.status === "assigned") {
+      if (delivery.status === "assigned" && currentPoint) {
         carrierToPickupPolylineRef.current = new window.google.maps.Polyline({
           path: [currentPoint, pickupPoint],
           geodesic: true,
@@ -696,7 +747,11 @@ export default function TrackingMap({ user }: Props) {
       } else {
         activePolylineRef.current = new window.google.maps.Polyline({
           path:
-            activePath.length > 1 ? activePath : [pickupPoint, currentPoint],
+            activePath.length > 1
+              ? activePath
+              : currentPoint
+                ? [pickupPoint, currentPoint]
+                : [pickupPoint, dropoffPoint],
           geodesic: true,
           strokeColor: routePalette.active,
           strokeOpacity: 0.95,
@@ -715,6 +770,73 @@ export default function TrackingMap({ user }: Props) {
           map: mapInstance.current,
         });
       }
+
+      const relevantManagedSegments = getDisplayRouteNetworkSegments(
+        managedSegments,
+        [
+          delivery.pickupLocation,
+          delivery.deliveryLocation,
+          effectiveCurrentLocation,
+        ],
+        { thresholdKm: 10, fallbackLimit: 120 },
+      );
+
+      relevantManagedSegments.forEach((segment) => {
+        const style = getRouteNetworkSegmentStyle(segment);
+        const polyline = new window.google.maps.Polyline({
+          path: [segment.start, segment.end],
+          geodesic: true,
+          strokeColor: style.strokeColor,
+          strokeOpacity: style.strokeOpacity,
+          strokeWeight: style.strokeWeight,
+          map: mapInstance.current,
+        });
+
+        polyline.addListener("click", () => {
+          if (!sharedInfoWindowRef.current) {
+            sharedInfoWindowRef.current = new window.google.maps.InfoWindow();
+          }
+          sharedInfoWindowRef.current.setPosition(segment.start);
+          sharedInfoWindowRef.current.setContent(`
+            <div style="padding:10px; min-width:220px; font-family:system-ui;">
+              <h3 style="margin:0 0 6px 0; font-size:14px; color:${style.strokeColor};">${segment.name}</h3>
+              <p style="margin:0 0 4px 0; font-size:12px; color:#475569;">${formatRouteNetworkSegmentType(segment.type)}</p>
+              <p style="margin:0; font-size:11px; color:#64748b;">${segment.note || "No note added."}</p>
+            </div>
+          `);
+          sharedInfoWindowRef.current.open({ map: mapInstance.current });
+        });
+
+        routeOverlayPolylinesRef.current.push(polyline);
+      });
+
+      (delivery.routeReviews || [])
+        .filter((review) => review.start && review.end)
+        .forEach((review) => {
+          const polyline = new window.google.maps.Polyline({
+            path: [review.start!, review.end!],
+            geodesic: true,
+            strokeColor: review.temporary ? "#f59e0b" : "#dc2626",
+            strokeOpacity: 1,
+            strokeWeight: 5,
+            map: mapInstance.current,
+          });
+          routeOverlayPolylinesRef.current.push(polyline);
+        });
+
+      (delivery.routeFeedback || [])
+        .filter((feedback) => feedback.start && feedback.end)
+        .forEach((feedback) => {
+          const polyline = new window.google.maps.Polyline({
+            path: [feedback.start!, feedback.end!],
+            geodesic: true,
+            strokeColor: "#2563eb",
+            strokeOpacity: 0.8,
+            strokeWeight: 4,
+            map: mapInstance.current,
+          });
+          routeOverlayPolylinesRef.current.push(polyline);
+        });
     }
 
     // Fit bounds to all markers
@@ -727,7 +849,13 @@ export default function TrackingMap({ user }: Props) {
         mapInstance.current.fitBounds(bounds, 50);
       }
     }
-  }, [visibleDeliveries, deliveryTracksMap, selectedDelivery, googleMapsLoaded]);
+  }, [
+    visibleDeliveries,
+    deliveryTracksMap,
+    managedSegments,
+    selectedDelivery,
+    googleMapsLoaded,
+  ]);
 
   // Debounced marker updates
   useEffect(() => {
@@ -744,7 +872,13 @@ export default function TrackingMap({ user }: Props) {
         clearTimeout(markersUpdateTimeoutRef.current);
       }
     };
-  }, [visibleDeliveries, deliveryTracksMap, selectedDelivery, googleMapsLoaded, updateMarkers]);
+  }, [
+    visibleDeliveries,
+    deliveryTracksMap,
+    selectedDelivery,
+    googleMapsLoaded,
+    updateMarkers,
+  ]);
 
   const centerOnDelivery = (deliveryId: string) => {
     const delivery = deliveries.find((d) => d.id === deliveryId);
@@ -755,6 +889,12 @@ export default function TrackingMap({ user }: Props) {
       });
       mapInstance.current.setZoom(16);
     }
+  };
+
+  const focusPoint = (point?: { lat: number; lng: number } | null) => {
+    if (!point || !mapInstance.current) return;
+    mapInstance.current.setCenter(point);
+    mapInstance.current.setZoom(16);
   };
 
   const getRoutePalette = (status: string) => {
@@ -838,12 +978,44 @@ export default function TrackingMap({ user }: Props) {
   const selectedDeliveryData = selectedDelivery
     ? visibleDeliveries.find((delivery) => delivery.id === selectedDelivery)
     : null;
+  const selectedLiveTrack = selectedDeliveryData
+    ? deliveryTracksMap[selectedDeliveryData.id]
+    : null;
+  const selectedLastUpdateMs =
+    typeof selectedLiveTrack?.timestamp === "number"
+      ? selectedLiveTrack.timestamp
+      : selectedDeliveryData?.currentLocation?.timestamp instanceof Date
+        ? selectedDeliveryData.currentLocation.timestamp.getTime()
+        : null;
+  const selectedFreshnessMinutes = selectedLastUpdateMs
+    ? Math.max(0, Math.round((Date.now() - selectedLastUpdateMs) / 60000))
+    : null;
   const selectedRoutePalette = getRoutePalette(
     selectedDeliveryData?.status || "in_transit",
   );
   const selectedStatusLabel = selectedDeliveryData
     ? formatStatusLabel(selectedDeliveryData.status)
     : "Current";
+  const visibleManagedSegments = useMemo(
+    () =>
+      selectedDeliveryData
+        ? getDisplayRouteNetworkSegments(
+            managedSegments,
+            [
+              selectedDeliveryData.pickupLocation,
+              selectedDeliveryData.deliveryLocation,
+              selectedLiveTrack
+                ? {
+                    lat: selectedLiveTrack.lat,
+                    lng: selectedLiveTrack.lng,
+                  }
+                : selectedDeliveryData.currentLocation,
+            ],
+            { thresholdKm: 10, fallbackLimit: 40 },
+          )
+        : [],
+    [managedSegments, selectedDeliveryData, selectedLiveTrack],
+  );
 
   if (!googleMapsLoaded) {
     return (
@@ -986,7 +1158,8 @@ export default function TrackingMap({ user }: Props) {
 
       <div className="mb-6 flex items-center justify-between">
         <p className="text-sm text-gray-500">
-          Showing <span className="font-semibold">{visibleDeliveries.length}</span>{" "}
+          Showing{" "}
+          <span className="font-semibold">{visibleDeliveries.length}</span>{" "}
           order{visibleDeliveries.length === 1 ? "" : "s"}
         </p>
         <button
@@ -1003,7 +1176,9 @@ export default function TrackingMap({ user }: Props) {
         <div className="bg-white rounded-xl shadow p-8 text-center">
           <div className="text-6xl mb-4">📦</div>
           <h3 className="text-xl font-semibold text-gray-700 mb-2">
-            {deliveries.length === 0 ? "No active orders" : "No orders in this filter"}
+            {deliveries.length === 0
+              ? "No active orders"
+              : "No orders in this filter"}
           </h3>
           <p className="text-gray-500">
             {deliveries.length === 0
@@ -1082,6 +1257,18 @@ export default function TrackingMap({ user }: Props) {
                       opacity: 0.75,
                       label: "Planned route",
                       description: "Original optimized route",
+                    },
+                    {
+                      color: "#16a34a",
+                      opacity: 0.92,
+                      label: "Managed shortcut",
+                      description: "Coordinator-approved local route",
+                    },
+                    {
+                      color: "#dc2626",
+                      opacity: 0.95,
+                      label: "Blocked / rejected",
+                      description: "Avoid this segment",
                     },
                   ]}
                 />
@@ -1205,6 +1392,30 @@ export default function TrackingMap({ user }: Props) {
                                 </div>
                               </div>
                             )}
+                            <div>
+                              <div className="text-sm text-gray-600">
+                                Tracking freshness
+                              </div>
+                              <div className="mt-1">
+                                {selectedFreshnessMinutes === null ? (
+                                  <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+                                    Waiting for live update
+                                  </span>
+                                ) : selectedFreshnessMinutes <= 3 ? (
+                                  <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                                    Live now • {selectedFreshnessMinutes}m old
+                                  </span>
+                                ) : selectedFreshnessMinutes <= 15 ? (
+                                  <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                                    Delayed • {selectedFreshnessMinutes}m old
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+                                    Stale • {selectedFreshnessMinutes}m old
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                             {[
                               "picked_up",
                               "in_transit",
@@ -1231,8 +1442,145 @@ export default function TrackingMap({ user }: Props) {
                                 </p>
                               </div>
                             )}
+                            <div>
+                              <div className="text-sm text-gray-600">
+                                Map jump
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    focusPoint(delivery.pickupLocation)
+                                  }
+                                  className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-200"
+                                >
+                                  Pickup
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    focusPoint(
+                                      selectedLiveTrack
+                                        ? {
+                                            lat: selectedLiveTrack.lat,
+                                            lng: selectedLiveTrack.lng,
+                                          }
+                                        : delivery.currentLocation,
+                                    )
+                                  }
+                                  className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800 hover:bg-blue-200"
+                                >
+                                  Current
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    focusPoint(delivery.deliveryLocation)
+                                  }
+                                  className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-800 hover:bg-red-200"
+                                >
+                                  Dropoff
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         </div>
+
+                        {visibleManagedSegments.length > 0 && (
+                          <div className="bg-white rounded-xl shadow p-6">
+                            <h4 className="text-lg font-bold text-gray-800 mb-4">
+                              Visible Route Rules
+                            </h4>
+                            <div className="flex flex-wrap gap-2">
+                              {visibleManagedSegments.map((segment) => {
+                                const style =
+                                  getRouteNetworkSegmentStyle(segment);
+                                return (
+                                  <button
+                                    key={segment.id}
+                                    type="button"
+                                    onClick={() => focusPoint(segment.start)}
+                                    className="rounded-full border px-3 py-1.5 text-xs font-semibold"
+                                    style={{
+                                      borderColor: style.strokeColor,
+                                      color: style.strokeColor,
+                                      backgroundColor: `${style.strokeColor}12`,
+                                    }}
+                                  >
+                                    {segment.name} •{" "}
+                                    {formatRouteNetworkSegmentType(
+                                      segment.type,
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {(delivery.routeReviews?.length ||
+                          delivery.routeFeedback?.length) && (
+                          <div className="bg-white rounded-xl shadow p-6">
+                            <h4 className="text-lg font-bold text-gray-800 mb-4">
+                              Route Advisories
+                            </h4>
+                            <div className="space-y-3 text-sm">
+                              {delivery.routeReviews
+                                ?.slice(0, 3)
+                                .map((review, index) => (
+                                  <div
+                                    key={`review-${index}`}
+                                    className="rounded-lg border border-amber-200 bg-amber-50 p-3"
+                                  >
+                                    <p className="font-semibold text-amber-800">
+                                      {review.type.replace(/_/g, " ")}
+                                    </p>
+                                    <p className="text-amber-700">
+                                      {review.reason ||
+                                        "Route adjustment under review"}
+                                    </p>
+                                    {review.start && (
+                                      <button
+                                        type="button"
+                                        onClick={() => focusPoint(review.start)}
+                                        className="mt-2 text-xs font-semibold text-amber-800 underline"
+                                      >
+                                        Locate on map
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                              {delivery.routeFeedback
+                                ?.slice(0, 2)
+                                .map((feedback, index) => (
+                                  <div
+                                    key={`feedback-${index}`}
+                                    className="rounded-lg border border-blue-200 bg-blue-50 p-3"
+                                  >
+                                    <p className="font-semibold text-blue-800">
+                                      {feedback.type.replace(/_/g, " ")}
+                                    </p>
+                                    <p className="text-blue-700">
+                                      {feedback.reason ||
+                                        feedback.note ||
+                                        "Carrier shared route guidance."}
+                                    </p>
+                                    {feedback.start && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          focusPoint(feedback.start)
+                                        }
+                                        className="mt-2 text-xs font-semibold text-blue-800 underline"
+                                      >
+                                        Locate on map
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Route Details */}
                         <div className="bg-white rounded-xl shadow p-6">
