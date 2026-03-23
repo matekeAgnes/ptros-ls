@@ -4,6 +4,12 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import { setDoc, doc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Link, useNavigate } from "react-router-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faCircleCheck,
+  faCircleInfo,
+  faTriangleExclamation,
+} from "@fortawesome/free-solid-svg-icons";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -113,28 +119,28 @@ export default function Register() {
 
   // Test storage function
   const testStorage = async () => {
-    console.log("🧪 Testing Firebase Storage...");
+    console.log("Testing Firebase Storage...");
     try {
       // Create a simple test file
       const testContent = `Test upload at ${new Date().toISOString()}`;
       const testBlob = new Blob([testContent], { type: "text/plain" });
       const testFile = new File([testBlob], "test.txt");
       
-      console.log("📤 Uploading test file...");
+      console.log("Uploading test file...");
       
       // Upload to carriers/test folder
       const testRef = ref(storage, "carriers/test_upload.txt");
       await uploadBytes(testRef, testFile);
       
       const url = await getDownloadURL(testRef);
-      console.log("✅ Storage test successful!");
-      console.log("📎 Download URL:", url);
+      console.log("Storage test successful!");
+      console.log("Download URL:", url);
       
-      alert(`✅ Storage test successful!\nFile uploaded to: carriers/test_upload.txt`);
+      alert(`Storage test successful!\nFile uploaded to: carriers/test_upload.txt`);
       
     } catch (error: any) {
-      console.error("❌ Storage test failed:", error);
-      alert(`❌ Storage test failed:\n${error.code}\n${error.message}`);
+      console.error("Storage test failed:", error);
+      alert(`Storage test failed:\n${error.code}\n${error.message}`);
     }
   };
 
@@ -170,12 +176,12 @@ export default function Register() {
             return;
           }
           
-          console.log("🖼️ Processing image...");
+          console.log("Processing image...");
           
           // Resize and crop the image
           const resizedFile = await resizeAndCropImage(file);
           
-          console.log("✅ Image processed successfully");
+          console.log("Image processed successfully");
           console.log("Original size:", file.size, "bytes");
           console.log("Processed size:", resizedFile.size, "bytes");
           
@@ -222,6 +228,11 @@ export default function Register() {
 
     if (!formData.fullName.trim()) {
       setError("Full name is required");
+      return false;
+    }
+
+    if (!/^[\p{L}]+([\s'\-.][\p{L}]+)*$/u.test(formData.fullName.trim())) {
+      setError("Full name can only contain letters");
       return false;
     }
     
@@ -274,7 +285,7 @@ export default function Register() {
     setLoading(true);
     setError("");
 
-    console.log("🚀 Starting registration process...");
+    console.log("Starting registration process...");
 
     if (!formData.acceptTerms) {
       setError("You must accept the terms and conditions");
@@ -284,7 +295,7 @@ export default function Register() {
 
     try {
       // 1. Create Firebase Auth user
-      console.log("👤 Step 1: Creating Firebase Auth user...");
+      console.log("Step 1: Creating Firebase Auth user...");
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         formData.email,
@@ -292,14 +303,14 @@ export default function Register() {
       );
       
       const userId = userCredential.user.uid;
-      console.log("✅ Auth user created. User ID:", userId);
+      console.log("Auth user created. User ID:", userId);
 
       // 2. Upload profile picture (MANDATORY)
       if (!formData.profilePicture) {
         throw new Error("Profile picture is required");
       }
 
-      console.log("📤 Step 2: Uploading profile picture...");
+      console.log("Step 2: Uploading profile picture...");
       console.log("File details:", {
         name: formData.profilePicture.name,
         size: formData.profilePicture.size,
@@ -319,15 +330,15 @@ export default function Register() {
       console.log("Uploading file to Firebase Storage...");
       // Upload the file
       await uploadBytes(storageRef, formData.profilePicture);
-      console.log("✅ File uploaded successfully!");
+      console.log("File uploaded successfully!");
       
       // Get the download URL
-      console.log("🔗 Getting download URL...");
+      console.log("Getting download URL...");
       const photoURL = await getDownloadURL(storageRef);
-      console.log("✅ Download URL obtained");
+      console.log("Download URL obtained");
 
       // 3. Save detailed profile to Firestore
-      console.log("💾 Saving user data to Firestore...");
+      console.log("Saving user data to Firestore...");
       await setDoc(doc(db, "users", userId), {
         email: formData.email,
         role: "carrier",
@@ -352,21 +363,21 @@ export default function Register() {
         hasProfilePicture: true,
       });
 
-      console.log("✅ Firestore document saved!");
+      console.log("Firestore document saved!");
 
       // 4. Show success and redirect
       alert(
-        "✅ Registration Successful!\n\n" +
+        "Registration Successful!\n\n" +
         "Your application has been submitted. Please wait for coordinator approval.\n\n" +
         "Your profile picture has been uploaded successfully."
       );
 
-      console.log("🎉 Registration complete! Redirecting to login...");
+      console.log("Registration complete! Redirecting to login...");
 
       // 5. Redirect to login
       navigate("/login");
     } catch (err: any) {
-      console.error("❌ Registration error:", err);
+      console.error("Registration error:", err);
 
       if (err.code === "auth/email-already-in-use") {
         setError(
@@ -485,7 +496,9 @@ export default function Register() {
             <div className="bg-red-50 border-l-4 border-red-500 p-4 m-6">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <span className="text-red-500">⚠️</span>
+                  <span className="text-red-500">
+                    <FontAwesomeIcon icon={faTriangleExclamation} />
+                  </span>
                 </div>
                 <div className="ml-3">
                   <p className="text-red-700">{error}</p>
@@ -601,7 +614,6 @@ export default function Register() {
                       value={formData.fullName}
                       onChange={handleChange}
                       className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="John Doe"
                       required
                     />
                   </div>
@@ -617,7 +629,6 @@ export default function Register() {
                         value={formData.email}
                         onChange={handleChange}
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="john@example.com"
                         required
                       />
                       <button
@@ -645,7 +656,6 @@ export default function Register() {
                         value={formData.password}
                         onChange={handleChange}
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="At least 8 characters"
                         minLength={8}
                         required
                       />
@@ -664,7 +674,6 @@ export default function Register() {
                         value={formData.confirmPassword}
                         onChange={handleChange}
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Confirm your password"
                         required
                       />
                     </div>
@@ -729,7 +738,6 @@ export default function Register() {
                         value={formData.phone}
                         onChange={handleChange}
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="+266 5000 0000"
                         required
                       />
                     </div>
@@ -744,7 +752,6 @@ export default function Register() {
                         value={formData.whatsapp}
                         onChange={handleChange}
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="+266 5000 0000 (optional)"
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Provide if different from phone number
@@ -781,7 +788,6 @@ export default function Register() {
                       onChange={handleChange}
                       rows={3}
                       className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="House number, street, area"
                       required
                     />
                     <p className="text-xs text-gray-500 mt-1">
@@ -850,7 +856,6 @@ export default function Register() {
                         value={formData.licensePlate}
                         onChange={handleChange}
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="e.g., A1234BC"
                       />
                     </div>
 
@@ -864,7 +869,6 @@ export default function Register() {
                         value={formData.idNumber}
                         onChange={handleChange}
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="National ID or Passport"
                       />
                     </div>
                   </div>
@@ -941,12 +945,13 @@ export default function Register() {
                                 style={{ objectFit: "cover" }}
                               />
                               <div className="absolute -bottom-1 -right-1 bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">
-                                ✓
+                                <FontAwesomeIcon icon={faCircleCheck} />
                               </div>
                             </div>
                             <div className="ml-3">
                               <span className="text-green-600 font-medium block">
-                                ✓ Uploaded and optimized
+                                <FontAwesomeIcon icon={faCircleCheck} className="mr-2" />
+                                Uploaded and optimized
                               </span>
                               <span className="text-xs text-gray-500 block mt-1">
                                 Cropped to square (200×200 pixels)
@@ -955,7 +960,7 @@ export default function Register() {
                           </>
                         ) : (
                           <span className="text-red-500 font-medium">
-                            ❌ No picture uploaded
+                            No picture uploaded
                           </span>
                         )}
                       </div>
@@ -989,7 +994,9 @@ export default function Register() {
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                   <div className="flex">
                     <div className="flex-shrink-0">
-                      <span className="text-blue-600">ℹ️</span>
+                      <span className="text-blue-600">
+                        <FontAwesomeIcon icon={faCircleInfo} />
+                      </span>
                     </div>
                     <div className="ml-3">
                       <h4 className="text-sm font-medium text-blue-800">
@@ -1009,7 +1016,9 @@ export default function Register() {
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
                   <div className="flex">
                     <div className="flex-shrink-0">
-                      <span className="text-yellow-600">⚠️</span>
+                      <span className="text-yellow-600">
+                        <FontAwesomeIcon icon={faTriangleExclamation} />
+                      </span>
                     </div>
                     <div className="ml-3">
                       <h4 className="text-sm font-medium text-yellow-800">
