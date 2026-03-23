@@ -1,1 +1,12 @@
 node_modules
+
+# Build output
+dist
+apps/*/dist
+
+# Turbo cache and daemon artifacts
+.turbo
+
+# Misc local artifacts
+.DS_Store
+*.log
