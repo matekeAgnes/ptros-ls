@@ -11,7 +11,7 @@ export default defineConfig({
   },
   server: {
     port: 3000, // FIXED PORT for Coordinator
-    strictPort: true, // Don't try other ports if 3000 is busy
+    strictPort: false, // Prefer 3000; fallback if busy
     host: true,
   },
 });

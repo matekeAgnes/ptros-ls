@@ -1,4 +1,9 @@
-import { db, auth, realtimeDb } from "@config";
+import {
+  db,
+  auth,
+  realtimeDb,
+  syncDeliveryLocationGraphStructure,
+} from "@config";
 import {
   addDoc,
   arrayUnion,
@@ -414,6 +419,7 @@ export class CarrierService {
         where("carrierId", "==", user.uid),
         where("status", "in", [
           "assigned",
+          "accepted",
           "picked_up",
           "in_transit",
           "out_for_delivery",
@@ -462,6 +468,32 @@ export class CarrierService {
     }
   }
 
+  static async getDeliveredDeliveries(): Promise<Delivery[]> {
+    try {
+      const user = auth.currentUser;
+      if (!user) return [];
+
+      const q = query(
+        collection(db, "deliveries"),
+        where("carrierId", "==", user.uid),
+        where("status", "==", "delivered"),
+        orderBy("deliveryTime", "desc"),
+      );
+
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(
+        (doc) =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          }) as Delivery,
+      );
+    } catch (error) {
+      console.error("Error fetching delivered deliveries:", error);
+      return [];
+    }
+  }
+
   static async updateDeliveryStatus(
     deliveryId: string,
     status: Delivery["status"],
@@ -497,6 +529,24 @@ export class CarrierService {
           snapshotReason as "status_change" | "delivery_complete",
         );
       }
+
+      // Sync location graph with trigger mapped from status
+      const graphTrigger =
+        status === "picked_up"
+          ? "picked_up"
+          : status === "in_transit"
+            ? "in_transit"
+            : status === "out_for_delivery"
+              ? "out_for_delivery"
+              : status === "delivered"
+                ? "delivered"
+                : "status_change";
+      syncDeliveryLocationGraphStructure({
+        deliveryId,
+        trigger: graphTrigger,
+      }).catch((e: unknown) =>
+        console.warn("Graph sync failed (updateDeliveryStatus):", e),
+      );
 
       return true;
     } catch (error) {
@@ -654,6 +704,7 @@ export class CarrierService {
       where("carrierId", "==", user.uid),
       where("status", "in", [
         "assigned",
+        "accepted",
         "picked_up",
         "in_transit",
         "out_for_delivery",
@@ -749,6 +800,14 @@ export class CarrierService {
         updatedAt: Timestamp.now(),
       });
 
+      // Sync location graph nodes/edges (fire-and-forget; silent on failure)
+      syncDeliveryLocationGraphStructure({
+        deliveryId,
+        trigger: "accepted",
+      }).catch((e: unknown) =>
+        console.warn("Graph sync failed (acceptTask):", e),
+      );
+
       return true;
     } catch (error) {
       console.error("Error accepting task:", error);
@@ -805,6 +864,14 @@ export class CarrierService {
         acceptedAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
+
+      // Sync location graph nodes/edges (fire-and-forget; silent on failure)
+      syncDeliveryLocationGraphStructure({
+        deliveryId,
+        trigger: "accepted",
+      }).catch((e: unknown) =>
+        console.warn("Graph sync failed (acceptAssignedDelivery):", e),
+      );
 
       return true;
     } catch (error) {
@@ -1058,7 +1125,9 @@ export class CarrierService {
         }
       },
       (err) => {
-        console.error("Geolocation error (high accuracy):", err);
+        console.error(
+          `Geolocation error (high accuracy): code=${err.code} ${err.message}`,
+        );
         // If timeout, retry with lower accuracy instead of stopping
         if (err.code === 3) {
           // TIMEOUT
@@ -1164,7 +1233,9 @@ export class CarrierService {
               }
             },
             (err) => {
-              console.error("Low accuracy geolocation also failed:", err);
+              console.error(
+                `Low accuracy geolocation also failed: code=${err.code} ${err.message}`,
+              );
               this.stopLocationSharing();
             },
             { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 },

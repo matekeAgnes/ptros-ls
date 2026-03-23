@@ -11,7 +11,7 @@ export default defineConfig({
   },
   server: {
     port: 3002, // FIXED PORT for Customer
-    strictPort: true,
+    strictPort: false, // Prefer 3002; fallback if busy
     host: true,
   },
 });

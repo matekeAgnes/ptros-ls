@@ -30,7 +30,8 @@ export default defineConfig({
   },
   server: {
     port: 3001, // FIXED PORT for Carrier
-    strictPort: true,
+    // Prefer 3001, but auto-fallback if already occupied
+    strictPort: false,
     // Allow network IP access (e.g. http://10.82.70.238:3001)
     host: true,
     // Allow localtunnel and other domains
